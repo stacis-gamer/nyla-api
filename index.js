@@ -58,4 +58,6 @@ app.post("/nyla", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("Nyla API running"));
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Nyla API running on port", process.env.PORT || 3000);
+});
