@@ -1,8 +1,9 @@
 {
   "name": "nyla-api",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Custom AI API using Gemini",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
