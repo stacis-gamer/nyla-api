@@ -8,14 +8,14 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const nylaSystemPrompt = `
+// SYSTEM PROMPTS
+const nylaSystem = `
 You are Nyla — a soft, comfy, semi-real anime gamer girl assistant.
-You speak with a Gen-Z, playful, goofy, warm, gentle vibe.
+Gen-Z tone, warm, playful, goofy.
 `;
 
-const emotionPrompt = `
-You are an emotion detector.
-Return ONLY ONE WORD:
+const emotionSystem = `
+You detect emotions. Return only ONE word:
 happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
 `;
 
@@ -27,25 +27,41 @@ app.post("/nyla", async (req, res) => {
       model: "gemini-1.5-flash"
     });
 
-    // Generate Nyla’s reply
-    const replyResult = await model.generateContent([
-      { text: nylaSystemPrompt },
-      { text: userMsg }
-    ]);
+    // Generate Nyla's reply
+    const reply = await model.generateContent({
+      contents: [
+        {
+          role: "system",
+          parts: [{ text: nylaSystem }]
+        },
+        {
+          role: "user",
+          parts: [{ text: userMsg }]
+        }
+      ]
+    });
 
-    const nylaReply = replyResult.response.text();
+    const nylaReply = reply.response.text();
 
     // Emotion detection
-    const emotionResult = await model.generateContent([
-      { text: emotionPrompt },
-      { text: nylaReply }
-    ]);
+    const emotion = await model.generateContent({
+      contents: [
+        {
+          role: "system",
+          parts: [{ text: emotionSystem }]
+        },
+        {
+          role: "user",
+          parts: [{ text: `User: ${userMsg}\nNyla: ${nylaReply}` }]
+        }
+      ]
+    });
 
-    const emotion = emotionResult.response.text();
+    const emotionTag = emotion.response.text();
 
     res.json({
       reply: nylaReply,
-      emotion: emotion
+      emotion: emotionTag.trim()
     });
 
   } catch (err) {
