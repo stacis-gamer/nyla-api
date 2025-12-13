@@ -23,9 +23,9 @@ app.post("/nyla", async (req, res) => {
   }
 
   try {
-    // 1️⃣ Nyla reply model
+    // MAIN MODEL – MUST BE THIS NAME
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash"
+      model: "models/gemini-1.5-flash-latest"
     });
 
     const replyResponse = await model.generateContent({
@@ -39,20 +39,18 @@ app.post("/nyla", async (req, res) => {
 
     const nylaReply = replyResponse.response.text();
 
-    // 2️⃣ Emotion detection model
+    // EMOTION MODEL – USE SAME MODEL!
     const emotionModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash"
+      model: "models/gemini-1.5-flash-latest"
     });
 
     const emotionResponse = await emotionModel.generateContent({
       contents: [
         {
           role: "user",
-          parts: [
-            {
-              text: `User said: ${userMessage}\nAssistant replied: ${nylaReply}\nDetect emotion:`
-            }
-          ]
+          parts: [{
+            text: `User said: ${userMessage}\nAssistant replied: ${nylaReply}\nEmotion:`
+          }]
         }
       ]
     });
@@ -66,11 +64,8 @@ app.post("/nyla", async (req, res) => {
 
   } catch (err) {
     console.error("🔥 SERVER ERROR:", err);
-    res.status(500).json({
-      error: "API error",
-      details: err.message
-    });
+    res.status(500).json({ error: "API error", details: err.message });
   }
 });
 
-app.listen(3000, () => console.log("🔥 Nyla API running with Gemini 1.5 Flash"));
+app.listen(3000, () => console.log("Nyla API running with Gemini Flash"));
