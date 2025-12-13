@@ -8,67 +8,63 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// SYSTEM PROMPTS
-const nylaSystem = `
-You are Nyla — a soft, comfy, semi-real anime gamer girl assistant.
-Gen-Z tone, warm, playful, goofy.
-`;
-
-const emotionSystem = `
-You detect emotions. Return only ONE word:
-happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
+// Emotion analyzer prompt
+const emotionSystemPrompt = `
+Detect the emotion of the assistant reply ONLY.
+Possible tags: happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
+Respond with JUST the tag.
 `;
 
 app.post("/nyla", async (req, res) => {
+  const userMessage = req.body.message;
+
+  if (!userMessage) {
+    return res.status(400).json({ error: "Missing 'message' in request body" });
+  }
+
   try {
-    const userMsg = req.body.message;
+    // 1️⃣ Generate Nyla reply
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-    });
-
-    // ----------- 1️⃣ NYLA REPLY -----------
-    const nylaResult = await model.generateContent({
+    const replyResponse = await model.generateContent({
       contents: [
         {
-          role: "system",
-          parts: [{ text: nylaSystem }]
-        },
-        {
           role: "user",
-          parts: [{ text: userMsg }]
+          parts: [{ text: userMessage }]
         }
       ]
     });
 
-    const nylaReply = nylaResult.response.text();
+    const nylaReply = replyResponse.response.text();
 
-    // ----------- 2️⃣ EMOTION DETECTION -----------
-    const emotionResult = await model.generateContent({
+    // 2️⃣ Generate emotion tag
+    const emotionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const emotionResponse = await emotionModel.generateContent({
       contents: [
         {
-          role: "system",
-          parts: [{ text: emotionSystem }]
-        },
-        {
           role: "user",
-          parts: [{ text: `User: ${userMsg}\nNyla: ${nylaReply}` }]
+          parts: [
+            {
+              text: `User said: ${userMessage}\nAssistant replied: ${nylaReply}\nDetect emotion:`
+            }
+          ]
         }
       ]
     });
 
-    const emotionTag = emotionResult.response.text().trim();
+    const emotionTag = emotionResponse.response.text().trim();
 
-    // ----------- SEND RESPONSE -----------
+    // return data
     res.json({
       reply: nylaReply,
-      emotion: emotionTag,
+      emotion: emotionTag
     });
 
   } catch (err) {
-    console.error("SERVER ERROR:", err);
-    res.status(500).json({ error: "API error" });
+    console.error("🔥 SERVER ERROR:", err);
+    res.status(500).json({ error: "API error", details: err.message });
   }
 });
 
-app.listen(3000, () => console.log("Nyla API running on port 3000"));
+app.listen(3000, () => console.log("Nyla API running with Gemini 1.5 Flash"));
