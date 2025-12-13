@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai/dist/index.mjs";
 
 const app = express();
 app.use(cors());
@@ -23,14 +23,13 @@ app.post("/nyla", async (req, res) => {
   const userMsg = req.body.message;
 
   try {
-    // Generate the assistant reply
     const nylaResult = await model.generateContent({
       contents: [
         {
           role: "user",
           parts: [
             {
-              text: `You are Nyla, a soft, comfy, semi-real anime gamer girl. Speak warmly, playful, gen-z tone.\nUser: ${userMsg}`,
+              text: `You are Nyla, a soft, comfy, semi-real anime gamer girl assistant. Speak warmly, playful, Gen-Z tone.\nUser: ${userMsg}`,
             },
           ],
         },
@@ -39,7 +38,6 @@ app.post("/nyla", async (req, res) => {
 
     const nylaReply = nylaResult.response.text();
 
-    // Analyze emotion
     const emotionResult = await model.generateContent({
       contents: [
         {
