@@ -24,11 +24,11 @@ app.post("/nyla", async (req, res) => {
     const userMsg = req.body.message;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash"
+      model: "gemini-1.5-flash",
     });
 
-    // Generate Nyla's reply
-    const reply = await model.generateContent({
+    // ----------- 1️⃣ NYLA REPLY -----------
+    const nylaResult = await model.generateContent({
       contents: [
         {
           role: "system",
@@ -41,10 +41,10 @@ app.post("/nyla", async (req, res) => {
       ]
     });
 
-    const nylaReply = reply.response.text();
+    const nylaReply = nylaResult.response.text();
 
-    // Emotion detection
-    const emotion = await model.generateContent({
+    // ----------- 2️⃣ EMOTION DETECTION -----------
+    const emotionResult = await model.generateContent({
       contents: [
         {
           role: "system",
@@ -57,11 +57,12 @@ app.post("/nyla", async (req, res) => {
       ]
     });
 
-    const emotionTag = emotion.response.text();
+    const emotionTag = emotionResult.response.text().trim();
 
+    // ----------- SEND RESPONSE -----------
     res.json({
       reply: nylaReply,
-      emotion: emotionTag.trim()
+      emotion: emotionTag,
     });
 
   } catch (err) {
