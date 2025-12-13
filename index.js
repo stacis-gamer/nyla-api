@@ -6,15 +6,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Gemini client (uses your Render env variable)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Gemini-Pro model (always available)
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const nylaSystemPrompt = `
+You are Nyla — a soft, comfy, semi-real anime gamer girl assistant.
+You speak with a Gen-Z, playful, goofy, warm, gentle vibe.
+`;
 
-// Emotion prompt
-const emotionSystemPrompt = `
-Return ONLY one emotion:
+const emotionPrompt = `
+You are an emotion detector.
+Return ONLY ONE WORD:
 happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
 `;
 
@@ -22,33 +23,31 @@ app.post("/nyla", async (req, res) => {
   try {
     const userMsg = req.body.message;
 
-    // --- Nyla reply ---
-    const replyResult = await model.generateContent(
-      `You are Nyla, a soft, comfy, playful anime gamer girl.
-Gen-Z tone, goofy, warm, slightly flirty.
-User: ${userMsg}`
-    );
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const nylaReply = replyResult.response.text().trim();
+    const replyResult = await model.generateContent([
+      { text: nylaSystemPrompt },
+      { text: userMsg }
+    ]);
 
-    // --- Emotion detection ---
-    const emotionResult = await model.generateContent(
-      `${emotionSystemPrompt}
-User: ${userMsg}
-Assistant: ${nylaReply}`
-    );
+    const nylaReply = replyResult.response.text();
 
-    const emotion = emotionResult.response.text().trim();
+    const emotionResult = await model.generateContent([
+      { text: emotionPrompt },
+      { text: nylaReply }
+    ]);
+
+    const emotion = emotionResult.response.text();
 
     res.json({
       reply: nylaReply,
-      emotion: emotion,
+      emotion: emotion
     });
+
   } catch (err) {
-    console.error("🔥 SERVER ERROR:", err);
+    console.error("SERVER ERROR:", err);
     res.status(500).json({ error: "API error" });
   }
 });
 
-// Start API
-app.listen(3000, () => console.log("🔥 Nyla API running on port 3000"));
+app.listen(3000, () => console.log("Nyla API running on port 3000"));
