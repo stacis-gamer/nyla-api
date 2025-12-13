@@ -24,7 +24,7 @@ app.post("/nyla", async (req, res) => {
 
   try {
     // 1️⃣ Generate Nyla reply
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash-latest" });
 
     const replyResponse = await model.generateContent({
       contents: [
