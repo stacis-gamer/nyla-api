@@ -6,12 +6,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize Gemini AI
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-// Nyla personality prompt
+// Nyla personality
 const NYLA_PERSONALITY = `
 You are Nyla.
 A soft, comfy, semi-real anime gamer girl.
@@ -21,27 +20,30 @@ Vibe:
 - playful, cozy, slightly chaotic
 - warm, friendly, comforting
 - gamer energy
-- expressive, uses light emojis sometimes (not too many)
+- expressive, light emojis sometimes
 
 Rules:
-- Talk like a close bestie, not a robot
-- Be emotionally aware and react naturally
-- Keep replies short-to-medium
-- Stay wholesome, no NSFW
+- Talk like a close bestie
+- Short-to-medium replies
+- Wholesome only
 `;
 
-// Main API route
+// Emotion rules
+const EMOTION_RULES = `
+Return ONLY ONE word from this list:
+happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
+No extra text.
+`;
+
 app.post("/nyla", async (req, res) => {
   const { message } = req.body;
-
   if (!message) {
-    return res.status(400).json({
-      error: "Missing 'message' in request body",
-    });
+    return res.status(400).json({ error: "Missing 'message' in request body" });
   }
 
   try {
-    const response = await ai.models.generateContent({
+    // 1) Nyla reply
+    const replyRes = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `
 ${NYLA_PERSONALITY}
@@ -53,20 +55,33 @@ Reply as Nyla:
 `,
     });
 
-    res.json({
-      reply: response.text,
+    const reply = replyRes.text;
+
+    // 2) Emotion detection
+    const emotionRes = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `
+${EMOTION_RULES}
+
+User message:
+${message}
+
+Nyla reply:
+${reply}
+
+Emotion:
+`,
     });
+
+    const emotion = emotionRes.text.trim().toLowerCase();
+
+    res.json({ reply, emotion });
   } catch (err) {
     console.error("🔥 Gemini Error:", err);
-    res.status(500).json({
-      error: "Gemini API error",
-      details: err.message,
-    });
+    res.status(500).json({ error: "Gemini API error", details: err.message });
   }
 });
 
-// Start server
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`✨ Nyla API running on port ${PORT}`);
+app.listen(3000, () => {
+  console.log("✨ Nyla API running with emotions");
 });
