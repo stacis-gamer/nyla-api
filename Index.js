@@ -8,45 +8,60 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const nylaSystemPrompt = `
-You are Nyla — a soft, comfy, semi-real anime gamer girl assistant.
-You speak with a Gen-Z, playful, goofy, warm, gentle vibe.
-`;
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
 
-const emotionPrompt = `
-You are an emotion detector.
-Return ONLY ONE WORD:
+// Emotion analyzer prompt
+const emotionSystemPrompt = `
+You are an emotion-detection module.
+Given a user message and assistant reply, respond ONLY with an emotion tag:
 happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
 `;
 
 app.post("/nyla", async (req, res) => {
+  const userMsg = req.body.message;
+
   try {
-    const userMsg = req.body.message;
+    // Generate the assistant reply
+    const nylaResult = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `You are Nyla, a soft, comfy, semi-real anime gamer girl. Speak warmly, playful, gen-z tone.\nUser: ${userMsg}`,
+            },
+          ],
+        },
+      ],
+    });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const nylaReply = nylaResult.response.text();
 
-    const replyResult = await model.generateContent([
-      { text: nylaSystemPrompt },
-      { text: userMsg }
-    ]);
+    // Analyze emotion
+    const emotionResult = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `${emotionSystemPrompt}\nUser: ${userMsg}\nAssistantReply: ${nylaReply}`,
+            },
+          ],
+        },
+      ],
+    });
 
-    const nylaReply = replyResult.response.text();
-
-    const emotionResult = await model.generateContent([
-      { text: emotionPrompt },
-      { text: nylaReply }
-    ]);
-
-    const emotion = emotionResult.response.text();
+    const emotionTag = emotionResult.response.text();
 
     res.json({
       reply: nylaReply,
-      emotion: emotion
+      emotion: emotionTag,
     });
-
   } catch (err) {
-    console.error("SERVER ERROR:", err);
-    res.status(500).json({ error: "API error" });
+    console.error("API ERROR:", err);
+    res.status(500).json({ error: "API error", details: String(err) });
   }
 });
 
