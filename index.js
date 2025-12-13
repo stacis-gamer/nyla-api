@@ -10,7 +10,9 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-// Nyla personality
+/* =========================
+   NYLA PERSONALITY
+========================= */
 const NYLA_PERSONALITY = `
 You are Nyla.
 A soft, comfy, semi-real anime gamer girl.
@@ -28,21 +30,29 @@ Rules:
 - Wholesome only
 `;
 
-// Emotion rules
+/* =========================
+   EMOTION RULES
+========================= */
 const EMOTION_RULES = `
 Return ONLY ONE word from this list:
 happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
 No extra text.
 `;
 
+/* =========================
+   CHAT ROUTE
+========================= */
 app.post("/nyla", async (req, res) => {
   const { message } = req.body;
+
   if (!message) {
-    return res.status(400).json({ error: "Missing 'message' in request body" });
+    return res.status(400).json({
+      error: "Missing 'message' in request body",
+    });
   }
 
   try {
-    // 1) Nyla reply
+    /* ---------- Nyla Reply ---------- */
     const replyRes = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `
@@ -57,7 +67,7 @@ Reply as Nyla:
 
     const reply = replyRes.text;
 
-    // 2) Emotion detection
+    /* ---------- Emotion Detection ---------- */
     const emotionRes = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `
@@ -75,13 +85,40 @@ Emotion:
 
     const emotion = emotionRes.text.trim().toLowerCase();
 
-    res.json({ reply, emotion });
+    return res.json({
+      reply,
+      emotion,
+      cooldown: false,
+    });
+
   } catch (err) {
-    console.error("🔥 Gemini Error:", err);
-    res.status(500).json({ error: "Gemini API error", details: err.message });
+    console.error("🔥 Gemini Error:", err.message);
+
+    /* ---------- RATE LIMIT / QUOTA HANDLING ---------- */
+    if (
+      err.message?.includes("RESOURCE_EXHAUSTED") ||
+      err.message?.includes("rate limit") ||
+      err.status === 429
+    ) {
+      return res.json({
+        reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
+        emotion: "sleepy",
+        cooldown: true,
+      });
+    }
+
+    /* ---------- FALLBACK ERROR ---------- */
+    return res.status(500).json({
+      reply: "Something broke on my side 😭",
+      emotion: "shocked",
+      cooldown: false,
+    });
   }
 });
 
+/* =========================
+   SERVER START
+========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with emotions");
+  console.log("✨ Nyla API running with emotions + cooldown handling");
 });
