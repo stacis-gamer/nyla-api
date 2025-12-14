@@ -16,11 +16,16 @@ const groq = new OpenAI({
 });
 
 /* =========================
-   SUPABASE (SERVICE ROLE)
+   SUPABASE (SERVICE ROLE — SERVER ONLY)
 ========================= */
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY // 🔥 FIX
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      persistSession: false
+    }
+  }
 );
 
 /* =========================
@@ -127,7 +132,7 @@ async function loadMemory(userId) {
 
   const { data, error } = await supabase
     .from("nyla_memory")
-    .select("value, importance, created_at")
+    .select("value")
     .eq("user_id", userId)
     .order("importance", { ascending: false })
     .order("created_at", { ascending: false })
@@ -138,7 +143,7 @@ async function loadMemory(userId) {
     return "";
   }
 
-  if (!data || data.length === 0) return "";
+  if (!data?.length) return "";
 
   return `
 KNOWN FACTS ABOUT THE USER (ALWAYS TRUE):
@@ -171,50 +176,31 @@ async function extractMemory(userMessage, nylaReply) {
 }
 
 /* =========================
-   SAVE MEMORY (FIXED)
+   SAVE MEMORY (UPSERT — FIXED)
 ========================= */
 async function saveMemory(userId, memory) {
   if (!memory?.save) return;
   if (!userId || userId === "guest") return;
 
-  const { data: existing, error: selectError } = await supabase
+  const { error } = await supabase
     .from("nyla_memory")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("memory_key", memory.key)
-    .limit(1);
-
-  if (selectError) {
-    console.error("🧠 MEMORY SELECT ERROR:", selectError);
-    return;
-  }
-
-  if (existing?.length) {
-    const { error: updateError } = await supabase
-      .from("nyla_memory")
-      .update({
-        value: memory.value,
-        importance: memory.importance
-      })
-      .eq("id", existing[0].id);
-
-    if (updateError) {
-      console.error("🧠 MEMORY UPDATE ERROR:", updateError);
-    }
-  } else {
-    const { error: insertError } = await supabase
-      .from("nyla_memory")
-      .insert({
+    .upsert(
+      {
         user_id: userId,
         type: memory.type,
-        memory_key: memory.key,
+        key: memory.key, // ✅ CONSISTENT COLUMN
         value: memory.value,
         importance: memory.importance
-      });
+      },
+      {
+        onConflict: "user_id,key"
+      }
+    );
 
-    if (insertError) {
-      console.error("🧠 MEMORY INSERT ERROR:", insertError);
-    }
+  if (error) {
+    console.error("🧠 MEMORY UPSERT ERROR:", error);
+  } else {
+    console.log("🧠 MEMORY SAVED:", memory.key);
   }
 }
 
@@ -282,7 +268,7 @@ app.post("/nyla", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("🔥 GROQ ERROR:", err?.message || err);
+    console.error("🔥 GROQ ERROR:", err);
     return res.json({
       reply: "something broke in my brain 😭",
       emotion: "shocked",
@@ -295,5 +281,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with REAL MEMORY (WRITE FIXED)");
+  console.log("✨ Nyla API running — MEMORY WRITE CONFIRMED");
 });
