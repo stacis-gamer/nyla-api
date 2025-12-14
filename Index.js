@@ -1,66 +1,76 @@
-import express from "express";
-import cors from "cors";
-import { GoogleGenerativeAI } from "@google/generative-ai/dist/index.mjs";
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-});
-
-// Emotion analyzer prompt
-const emotionSystemPrompt = `
-You are an emotion-detection module.
-Given a user message and assistant reply, respond ONLY with an emotion tag:
-happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
-`;
-
 app.post("/nyla", async (req, res) => {
-  const userMsg = req.body.message;
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({
+      error: "Missing 'message' in request body",
+    });
+  }
 
   try {
-    const nylaResult = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `You are Nyla, a soft, comfy, semi-real anime gamer girl assistant. Speak warmly, playful, Gen-Z tone.\nUser: ${userMsg}`,
-            },
-          ],
-        },
-      ],
+    // ✅ CREATE MODEL INSTANCES (IMPORTANT)
+    const chatModel = ai.getGenerativeModel({
+      model: "gemini-1.5-flash"
     });
 
-    const nylaReply = nylaResult.response.text();
-
-    const emotionResult = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `${emotionSystemPrompt}\nUser: ${userMsg}\nAssistantReply: ${nylaReply}`,
-            },
-          ],
-        },
-      ],
+    const emotionModel = ai.getGenerativeModel({
+      model: "gemini-1.5-flash"
     });
 
-    const emotionTag = emotionResult.response.text();
+    /* ---------- Nyla Reply ---------- */
+    const replyResult = await chatModel.generateContent(
+      `${NYLA_PERSONALITY}
 
-    res.json({
-      reply: nylaReply,
-      emotion: emotionTag,
+User message:
+${message}
+
+Reply as Nyla:`
+    );
+
+    const reply = replyResult.response.text();
+
+    /* ---------- Emotion Detection ---------- */
+    const emotionResult = await emotionModel.generateContent(
+      `${EMOTION_RULES}
+
+User message:
+${message}
+
+Nyla reply:
+${reply}
+
+Emotion:`
+    );
+
+    const emotion = emotionResult.response.text().trim().toLowerCase();
+
+    return res.json({
+      reply,
+      emotion,
+      cooldown: false,
     });
+
   } catch (err) {
-    console.error("API ERROR:", err);
-    res.status(500).json({ error: "API error", details: String(err) });
+    console.error("🔥 Gemini Error FULL:", err);
+
+    // ⛽ QUOTA / RATE LIMIT
+    if (
+      err?.status === 429 ||
+      err?.message?.includes("RESOURCE_EXHAUSTED") ||
+      err?.message?.includes("quota")
+    ) {
+      return res.json({
+        reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
+        emotion: "sleepy",
+        cooldown: true,
+      });
+    }
+
+    // ❌ REAL FAILURE
+    return res.status(500).json({
+      reply: "Something broke on my side 😭",
+      emotion: "shocked",
+      cooldown: false,
+    });
   }
 });
-
-app.listen(3000, () => console.log("Nyla API running on port 3000"));
