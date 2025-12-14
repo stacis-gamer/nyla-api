@@ -95,6 +95,23 @@ function sanitizeEmotion(raw) {
 }
 
 /* =========================
+   MEMORY ACKNOWLEDGEMENT
+========================= */
+function memoryAck(memory) {
+  if (!memory?.save) return "";
+
+  const lines = [
+    "okay wait— that’s important, I’ll remember that 💜",
+    "got it… saving this in my brain 🧠✨",
+    "mmhm, noted forever 🥹💜",
+    "I’ll keep that in mind, promise 💫",
+    "that feels important… locking it in 🔒💜"
+  ];
+
+  return "\n\n" + lines[Math.floor(Math.random() * lines.length)];
+}
+
+/* =========================
    LOAD MEMORY
 ========================= */
 async function loadMemory(userId) {
@@ -187,7 +204,7 @@ app.post("/nyla", async (req, res) => {
       max_tokens: 180
     });
 
-    const reply =
+    let reply =
       completion.choices[0]?.message?.content?.trim() || "Heyyy 💜";
 
     /* 🎭 EMOTION */
@@ -208,6 +225,9 @@ app.post("/nyla", async (req, res) => {
     /* 🧠 MEMORY EXTRACTION */
     const memory = await extractMemory(message, reply);
     await saveMemory(userId, memory);
+
+    /* 💜 MEMORY ACK */
+    reply += memoryAck(memory);
 
     return res.json({
       reply,
@@ -238,5 +258,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with MEMORY + emotions");
+  console.log("✨ Nyla API running with MEMORY + emotions + acknowledgment");
 });
