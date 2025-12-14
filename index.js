@@ -54,7 +54,7 @@ app.post("/nyla", async (req, res) => {
   try {
     /* ---------- Nyla Reply ---------- */
     const replyRes = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: `
 ${NYLA_PERSONALITY}
 
@@ -65,11 +65,11 @@ Reply as Nyla:
 `,
     });
 
-    const reply = replyRes.text;
+    const reply = replyRes.text?.trim() || "Heyyy 💜";
 
     /* ---------- Emotion Detection ---------- */
     const emotionRes = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: `
 ${EMOTION_RULES}
 
@@ -83,7 +83,8 @@ Emotion:
 `,
     });
 
-    const emotion = emotionRes.text.trim().toLowerCase();
+    const emotion =
+      emotionRes.text?.trim().toLowerCase() || "happy";
 
     return res.json({
       reply,
@@ -92,13 +93,13 @@ Emotion:
     });
 
   } catch (err) {
-    console.error("🔥 Gemini Error:", err.message);
+    console.error("🔥 Gemini Error:", err?.message || err);
 
     /* ---------- RATE LIMIT / QUOTA HANDLING ---------- */
     if (
-      err.message?.includes("RESOURCE_EXHAUSTED") ||
-      err.message?.includes("rate limit") ||
-      err.status === 429
+      err?.message?.includes("RESOURCE_EXHAUSTED") ||
+      err?.message?.includes("rate limit") ||
+      err?.status === 429
     ) {
       return res.json({
         reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
@@ -120,5 +121,5 @@ Emotion:
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with emotions + cooldown handling");
+  console.log("✨ Nyla API running on Gemini 1.5 Flash");
 });
