@@ -1,7 +1,9 @@
 {
   "name": "nyla-api",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Nyla AI API powered by Groq",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
@@ -11,6 +13,6 @@
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
-    "@google/generative-ai": "^0.21.0"
+    "openai": "^4.52.0"
   }
 }
