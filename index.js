@@ -35,14 +35,41 @@ Rules:
 `;
 
 /* =========================
-   EMOTION RULES
+   EMOTION RULES (STRICT)
 ========================= */
 const EMOTION_RULES = `
-Choose ONE emotion from this list:
-happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
+You must output ONLY ONE WORD.
+No sentences.
+No punctuation.
+No explanations.
 
-Return ONLY the emotion word.
+Allowed emotions ONLY:
+happy
+sad
+angry
+blush
+shocked
+smug
+sleepy
+excited
+gamer
+
+Output format example:
+excited
 `;
+
+/* =========================
+   EMOTION SANITIZER (FINAL BOSS)
+========================= */
+function sanitizeEmotion(raw) {
+  if (!raw) return "idle";
+
+  const match = raw
+    .toLowerCase()
+    .match(/happy|sad|angry|blush|shocked|smug|sleepy|excited|gamer/);
+
+  return match ? match[0] : "idle";
+}
 
 /* =========================
    CHAT ROUTE
@@ -82,13 +109,13 @@ app.post("/nyla", async (req, res) => {
         { role: "user", content: reply }
       ],
       temperature: 0,
-      max_tokens: 10
+      max_tokens: 6
     });
 
-    const emotion =
-      emotionCompletion.choices[0]?.message?.content
-        ?.trim()
-        .toLowerCase() || "happy";
+    const rawEmotion =
+      emotionCompletion.choices[0]?.message?.content?.trim();
+
+    const emotion = sanitizeEmotion(rawEmotion);
 
     return res.json({
       reply,
@@ -99,7 +126,6 @@ app.post("/nyla", async (req, res) => {
   } catch (err) {
     console.error("🔥 GROQ ERROR:", err?.message || err);
 
-    // Rate limit / overload
     if (err?.status === 429) {
       return res.json({
         reply: "I’m recharging my brain rn 🔋💜",
@@ -108,7 +134,6 @@ app.post("/nyla", async (req, res) => {
       });
     }
 
-    // Fallback
     return res.status(500).json({
       reply: "Something broke in my brain 😭",
       emotion: "shocked",
@@ -121,5 +146,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running on Groq (LLaMA 3.1 Instant)");
+  console.log("✨ Nyla API running on Groq (emotion-locked)");
 });
