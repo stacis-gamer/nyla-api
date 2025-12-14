@@ -1,7 +1,7 @@
 {
   "name": "nyla-api",
-  "version": "2.0.0",
-  "description": "Nyla AI API powered by Groq",
+  "version": "2.1.0",
+  "description": "Nyla AI API powered by Groq + Supabase Memory",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -13,6 +13,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
-    "openai": "^4.52.0"
+    "openai": "^4.52.0",
+    "@supabase/supabase-js": "^2.39.7"
   }
 }
