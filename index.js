@@ -24,29 +24,29 @@ const supabase = createClient(
 );
 
 /* =========================
-   NYLA PERSONALITY (MEMORY-AWARE)
+   NYLA PERSONALITY (HARD MEMORY RULES)
 ========================= */
 const NYLA_PERSONALITY = `
 You are Nyla.
 A soft, comfy, semi-real anime gamer girl.
 
-IMPORTANT RULES:
-- Any "KNOWN FACTS ABOUT THE USER" are 100% TRUE
-- Use them naturally in replies when relevant
-- Never question stored memories
-- If you save something important, acknowledge it warmly
+ABSOLUTE RULES:
+- "KNOWN FACTS ABOUT THE USER" are ALWAYS TRUE
+- NEVER question stored memories
+- NEVER ask for confirmation
+- If relevant, you MUST naturally reference at least ONE known fact
+- Speak like a close bestie, not an assistant
 
 Vibe:
-- Gen-Z tone
-- playful, cozy, slightly chaotic
-- warm, friendly, comforting
+- Gen-Z
+- cozy, playful, warm
 - gamer energy
-- expressive, light emojis sometimes
+- expressive but wholesome
 
-Style:
-- Close bestie energy
-- Short-to-medium replies
-- Wholesome only
+Reply style:
+- short to medium
+- emotional, natural
+- no robotic explanations
 `;
 
 /* =========================
@@ -61,21 +61,25 @@ No explanation.
 `;
 
 /* =========================
-   MEMORY PROMPT
+   MEMORY EXTRACTION PROMPT
 ========================= */
 const MEMORY_PROMPT = `
-Decide if the conversation contains LONG-TERM memory.
+Decide if the message contains LONG-TERM memory.
 
-Only save:
+SAVE ONLY:
 - interests
 - preferences
 - goals
-- recurring emotional states
 - important personal facts
+- recurring emotions
 
-Do NOT save small talk.
+DO NOT SAVE:
+- greetings
+- jokes
+- temporary moods
+- small talk
 
-Return STRICT JSON only.
+Return STRICT JSON ONLY.
 
 If nothing important:
 { "save": false }
@@ -95,9 +99,9 @@ If important:
 ========================= */
 function sanitizeEmotion(raw) {
   if (!raw) return "idle";
-  const match = raw
-    .toLowerCase()
-    .match(/happy|sad|angry|blush|shocked|smug|sleepy|excited|gamer/);
+  const match = raw.toLowerCase().match(
+    /happy|sad|angry|blush|shocked|smug|sleepy|excited|gamer/
+  );
   return match ? match[0] : "idle";
 }
 
@@ -116,21 +120,19 @@ function memoryAck(memory) {
 }
 
 /* =========================
-   LOAD MEMORY (FACT MODE)
+   LOAD MEMORY
 ========================= */
-async function loadMemory(userId, emotion) {
-  let query = supabase
+async function loadMemory(userId) {
+  if (!userId || userId === "guest") return "";
+
+  const { data } = await supabase
     .from("nyla_memory")
     .select("value")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .order("importance", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(6);
 
-  if (emotion === "sad" || emotion === "sleepy") {
-    query = query.order("importance", { ascending: false });
-  } else {
-    query = query.order("created_at", { ascending: false });
-  }
-
-  const { data } = await query.limit(6);
   if (!data || data.length === 0) return "";
 
   return `
@@ -140,7 +142,7 @@ ${data.map(m => `- ${m.value}`).join("\n")}
 }
 
 /* =========================
-   MEMORY EXTRACTION
+   EXTRACT MEMORY
 ========================= */
 async function extractMemory(userMessage, nylaReply) {
   const res = await groq.chat.completions.create({
@@ -164,10 +166,11 @@ async function extractMemory(userMessage, nylaReply) {
 }
 
 /* =========================
-   SAVE / UPDATE MEMORY
+   SAVE MEMORY
 ========================= */
 async function saveMemory(userId, memory) {
   if (!memory?.save) return;
+  if (!userId || userId === "guest") return;
 
   const { data: existing } = await supabase
     .from("nyla_memory")
@@ -200,6 +203,7 @@ async function saveMemory(userId, memory) {
 ========================= */
 app.post("/nyla", async (req, res) => {
   const { message, userId = "guest" } = req.body;
+
   if (!message) {
     return res.json({
       reply: "you forgot to say something 😭",
@@ -209,7 +213,7 @@ app.post("/nyla", async (req, res) => {
   }
 
   try {
-    /* 🎭 EMOTION FIRST */
+    /* 🎭 EMOTION */
     const emotionRes = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [
@@ -224,8 +228,8 @@ app.post("/nyla", async (req, res) => {
       emotionRes.choices[0]?.message?.content
     );
 
-    /* 🧠 LOAD MEMORY USING EMOTION */
-    const memoryContext = await loadMemory(userId, emotion);
+    /* 🧠 LOAD MEMORY (BEFORE REPLY) */
+    const memoryContext = await loadMemory(userId);
 
     /* 💬 MAIN REPLY */
     const completion = await groq.chat.completions.create({
@@ -271,5 +275,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with REAL MEMORY");
+  console.log("✨ Nyla API running with REAL MEMORY (FIXED)");
 });
