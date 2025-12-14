@@ -50,7 +50,8 @@ const EMOTION_RULES = `
 Return ONLY ONE WORD from:
 happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer
 
-No punctuation. No explanation.
+No punctuation.
+No explanation.
 `;
 
 /* =========================
@@ -59,14 +60,17 @@ No punctuation. No explanation.
 const MEMORY_PROMPT = `
 Analyze the conversation.
 
-Only save LONG-TERM info:
+Only save LONG-TERM information:
 - interests
 - preferences
 - goals
-- recurring emotions
+- recurring emotional states
 - important personal facts
 
-DO NOT save small talk or jokes.
+DO NOT save:
+- small talk
+- jokes
+- greetings
 
 Return STRICT JSON.
 
@@ -77,7 +81,7 @@ If important:
 {
   "save": true,
   "type": "core | preference | relationship",
-  "key": "short_snake_case",
+  "key": "short_snake_case_identifier",
   "value": "what Nyla should remember",
   "importance": 1-5
 }
@@ -88,9 +92,11 @@ If important:
 ========================= */
 function sanitizeEmotion(raw) {
   if (!raw) return "idle";
+
   const match = raw
     .toLowerCase()
     .match(/happy|sad|angry|blush|shocked|smug|sleepy|excited|gamer/);
+
   return match ? match[0] : "idle";
 }
 
@@ -101,26 +107,40 @@ function memoryAck(memory) {
   if (!memory?.save) return "";
 
   const lines = [
-    "okay wait— that’s important, I’ll remember that 💜",
+    "okay wait— I’ll remember that 💜",
     "got it… saving this in my brain 🧠✨",
     "mmhm, noted forever 🥹💜",
-    "I’ll keep that in mind, promise 💫",
-    "that feels important… locking it in 🔒💜"
+    "that feels important… locking it in 🔒💜",
+    "I’ll keep that in mind, promise 💫"
   ];
 
   return "\n\n" + lines[Math.floor(Math.random() * lines.length)];
 }
 
 /* =========================
-   LOAD MEMORY
+   FORGET COMMAND DETECTOR
 ========================= */
-async function loadMemory(userId) {
-  const { data } = await supabase
+function isForgetCommand(text) {
+  return /forget|delete that|don'?t remember/i.test(text);
+}
+
+/* =========================
+   LOAD MEMORY (EMOTION-AWARE)
+========================= */
+async function loadMemory(userId, emotion) {
+  let query = supabase
     .from("nyla_memory")
     .select("value")
-    .eq("user_id", userId)
-    .order("importance", { ascending: false })
-    .limit(8);
+    .eq("user_id", userId);
+
+  // Emotion-weighted recall
+  if (emotion === "sad" || emotion === "sleepy") {
+    query = query.order("importance", { ascending: false });
+  } else {
+    query = query.order("created_at", { ascending: false });
+  }
+
+  const { data } = await query.limit(6);
 
   if (!data || data.length === 0) return "";
 
@@ -161,18 +181,59 @@ ${nylaReply}
 }
 
 /* =========================
-   SAVE MEMORY
+   SAVE / UPDATE MEMORY
 ========================= */
 async function saveMemory(userId, memory) {
   if (!memory.save) return;
 
-  await supabase.from("nyla_memory").insert({
-    user_id: userId,
-    type: memory.type,
-    key: memory.key,
-    value: memory.value,
-    importance: memory.importance
-  });
+  // Check if this memory already exists
+  const { data: existing } = await supabase
+    .from("nyla_memory")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("key", memory.key)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    // UPDATE existing memory
+    await supabase
+      .from("nyla_memory")
+      .update({
+        value: memory.value,
+        importance: memory.importance
+      })
+      .eq("id", existing[0].id);
+  } else {
+    // INSERT new memory
+    await supabase.from("nyla_memory").insert({
+      user_id: userId,
+      type: memory.type,
+      key: memory.key,
+      value: memory.value,
+      importance: memory.importance
+    });
+  }
+}
+
+/* =========================
+   FORGET LAST MEMORY
+========================= */
+async function forgetLastMemory(userId) {
+  const { data } = await supabase
+    .from("nyla_memory")
+    .select("id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (data && data.length > 0) {
+    await supabase
+      .from("nyla_memory")
+      .delete()
+      .eq("id", data[0].id);
+    return true;
+  }
+  return false;
 }
 
 /* =========================
@@ -183,17 +244,28 @@ app.post("/nyla", async (req, res) => {
 
   if (!message) {
     return res.json({
-      reply: "You forgot to say something 😭",
+      reply: "you forgot to say something 😭",
       emotion: "shocked",
       cooldown: false
     });
   }
 
   try {
-    /* 🧠 LOAD MEMORY */
-    const memoryContext = await loadMemory(userId);
+    /* 🗑️ FORGET COMMAND */
+    if (isForgetCommand(message)) {
+      const removed = await forgetLastMemory(userId);
+      return res.json({
+        reply: removed
+          ? "okay… I’ve let that go 💭"
+          : "hmm… there’s nothing to forget rn 🤍",
+        emotion: "sleepy",
+        cooldown: false
+      });
+    }
 
-    /* 💬 MAIN REPLY */
+    /* 💬 MAIN REPLY (with memory) */
+    const memoryContext = await loadMemory(userId, "neutral");
+
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [
@@ -205,7 +277,7 @@ app.post("/nyla", async (req, res) => {
     });
 
     let reply =
-      completion.choices[0]?.message?.content?.trim() || "Heyyy 💜";
+      completion.choices[0]?.message?.content?.trim() || "heyyy 💜";
 
     /* 🎭 EMOTION */
     const emotionCompletion = await groq.chat.completions.create({
@@ -222,11 +294,11 @@ app.post("/nyla", async (req, res) => {
       emotionCompletion.choices[0]?.message?.content
     );
 
-    /* 🧠 MEMORY EXTRACTION */
+    /* 🧠 MEMORY EXTRACTION + SAVE */
     const memory = await extractMemory(message, reply);
     await saveMemory(userId, memory);
 
-    /* 💜 MEMORY ACK */
+    /* 💜 ACKNOWLEDGE MEMORY */
     reply += memoryAck(memory);
 
     return res.json({
@@ -247,7 +319,7 @@ app.post("/nyla", async (req, res) => {
     }
 
     return res.json({
-      reply: "Something broke in my brain 😭",
+      reply: "something broke in my brain 😭",
       emotion: "shocked",
       cooldown: false
     });
@@ -258,5 +330,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with MEMORY + emotions + acknowledgment");
+  console.log("✨ Nyla API running with FULL MEMORY SYSTEM");
 });
