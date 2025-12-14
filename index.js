@@ -1,21 +1,18 @@
 import express from "express";
 import cors from "cors";
+import OpenAI from "openai";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* =========================
-   CONFIG
+   GROQ CLIENT (OpenAI-compatible)
 ========================= */
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-if (!GEMINI_API_KEY) {
-  console.error("❌ GEMINI_API_KEY missing");
-  process.exit(1);
-}
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1"
+});
 
 /* =========================
    NYLA PERSONALITY
@@ -38,19 +35,14 @@ Rules:
 `;
 
 /* =========================
-   EMOTIONS
+   EMOTION RULES
 ========================= */
-const ALLOWED_EMOTIONS = [
-  "happy",
-  "sad",
-  "angry",
-  "blush",
-  "shocked",
-  "smug",
-  "sleepy",
-  "excited",
-  "gamer"
-];
+const EMOTION_RULES = `
+Choose ONE emotion from this list:
+happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
+
+Return ONLY the emotion word.
+`;
 
 /* =========================
    CHAT ROUTE
@@ -60,101 +52,67 @@ app.post("/nyla", async (req, res) => {
 
   if (!message) {
     return res.status(400).json({
-      reply: "Say something first, bestie 🥺",
-      emotion: "sad",
-      cooldown: false,
+      reply: "You forgot to say something 😭",
+      emotion: "shocked",
+      cooldown: false
     });
   }
 
   try {
-    /* ---------- REQUEST BODY ---------- */
-    const requestBody = {
-      contents: [{
-        parts: [{
-          text: `
-${NYLA_PERSONALITY}
-
-User said:
-"${message}"
-
-Task:
-Reply as Nyla AND detect emotion.
-
-Return ONLY valid JSON in this format:
-{
-  "reply": "...",
-  "emotion": "happy | sad | angry | blush | shocked | smug | sleepy | excited | gamer"
-}
-          `
-        }]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    };
-
-    /* ---------- FETCH ---------- */
-    const response = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+    /* ---------- MAIN RESPONSE ---------- */
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: NYLA_PERSONALITY },
+        { role: "user", content: message }
+      ],
+      temperature: 0.9,
+      max_tokens: 180
     });
 
-    const data = await response.json();
+    const reply =
+      completion.choices[0]?.message?.content?.trim() ||
+      "Heyyy 💜";
 
-    if (!response.ok) {
-      console.error("🔥 Gemini API Error:", JSON.stringify(data, null, 2));
-      throw new Error(data.error?.message || "Gemini API Error");
-    }
+    /* ---------- EMOTION DETECTION ---------- */
+    const emotionCompletion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: EMOTION_RULES },
+        { role: "user", content: reply }
+      ],
+      temperature: 0,
+      max_tokens: 10
+    });
 
-    /* ---------- PARSE RESPONSE ---------- */
-    let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    // remove markdown if Gemini sneaks it in
-    rawText = rawText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      throw new Error("Invalid JSON from Gemini");
-    }
-
-    const reply = parsed.reply || "Heyyy 💜";
-    const emotion = ALLOWED_EMOTIONS.includes(parsed.emotion)
-      ? parsed.emotion
-      : "happy";
+    const emotion =
+      emotionCompletion.choices[0]?.message?.content
+        ?.trim()
+        .toLowerCase() || "happy";
 
     return res.json({
       reply,
       emotion,
-      cooldown: false,
+      cooldown: false
     });
 
   } catch (err) {
-    console.error("🔥 FULL ERROR:", err.message);
+    console.error("🔥 GROQ ERROR:", err?.message || err);
 
-    /* ---------- COOLDOWN / QUOTA ---------- */
-    if (
-      err.message?.includes("429") ||
-      err.message?.includes("RESOURCE_EXHAUSTED") ||
-      err.message?.includes("quota")
-    ) {
+    // Rate limit / overload
+    if (err?.status === 429) {
       return res.json({
-        reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
+        reply: "I’m recharging my brain rn 🔋💜",
         emotion: "sleepy",
-        cooldown: true,
+        cooldown: true
       });
     }
 
-    /* ---------- FALLBACK ---------- */
+    // Fallback
     return res.status(500).json({
-      reply: "My brain glitched for a sec 😵‍💫",
+      reply: "Something broke in my brain 😭",
       emotion: "shocked",
-      cooldown: false,
+      cooldown: false
     });
   }
 });
@@ -162,7 +120,6 @@ Return ONLY valid JSON in this format:
 /* =========================
    SERVER START
 ========================= */
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✨ Nyla API running on Gemini 1.5 Flash (REST) at port ${PORT}`);
+app.listen(3000, () => {
+  console.log("✨ Nyla API running on Groq (LLaMA 3.1 Instant)");
 });
