@@ -1,17 +1,12 @@
 import express from "express";
 import cors from "cors";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* =========================
-   GEMINI CLIENT
-========================= */
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /* =========================
    NYLA PERSONALITY
@@ -42,18 +37,10 @@ happy, sad, angry, blush, shocked, smug, sleepy, excited, gamer.
 No extra text.
 `;
 
-/* =========================
-   MODEL (STABLE)
-========================= */
-const MODEL_NAME = "gemini-1.5-flash-001";
-
-/* =========================
-   CHAT ROUTE
-========================= */
 app.post("/nyla", async (req, res) => {
   const { message } = req.body;
 
-  if (!message || typeof message !== "string") {
+  if (!message) {
     return res.status(400).json({
       reply: "Say something first 😭",
       emotion: "shocked",
@@ -62,42 +49,26 @@ app.post("/nyla", async (req, res) => {
   }
 
   try {
-    /* ---------- Nyla Reply ---------- */
-    const replyResult = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `
-${NYLA_PERSONALITY}
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash-001",
+    });
+
+    // Nyla reply
+    const replyResult = await model.generateContent(
+      `${NYLA_PERSONALITY}
 
 User message:
 ${message}
 
-Reply as Nyla:
-              `.trim(),
-            },
-          ],
-        },
-      ],
-    });
+Reply as Nyla:`
+    );
 
     const reply =
-      replyResult?.text?.trim() ||
-      "Heyyy 💜 I’m here!";
+      replyResult.response.text()?.trim() || "Heyyy 💜";
 
-    /* ---------- Emotion Detection ---------- */
-    const emotionResult = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `
-${EMOTION_RULES}
+    // Emotion
+    const emotionResult = await model.generateContent(
+      `${EMOTION_RULES}
 
 User message:
 ${message}
@@ -105,41 +76,34 @@ ${message}
 Nyla reply:
 ${reply}
 
-Emotion:
-              `.trim(),
-            },
-          ],
-        },
-      ],
-    });
+Emotion:`
+    );
 
     const emotion =
-      emotionResult?.text?.trim().toLowerCase() || "happy";
+      emotionResult.response.text()?.trim().toLowerCase() || "happy";
 
-    return res.json({
+    res.json({
       reply,
       emotion,
       cooldown: false,
     });
 
   } catch (err) {
-    console.error("🔥 Gemini Error:", err);
+    console.error("🔥 GEMINI ERROR:", err);
 
-    /* ---------- QUOTA / RATE LIMIT ---------- */
     if (
       err?.status === 429 ||
       err?.message?.includes("RESOURCE_EXHAUSTED") ||
       err?.message?.includes("quota")
     ) {
       return res.json({
-        reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
+        reply: "I’m recharging right now 🔋💜",
         emotion: "sleepy",
         cooldown: true,
       });
     }
 
-    /* ---------- FALLBACK ---------- */
-    return res.status(500).json({
+    res.status(500).json({
       reply: "Something broke on my side 😭",
       emotion: "shocked",
       cooldown: false,
@@ -147,11 +111,6 @@ Emotion:
   }
 });
 
-/* =========================
-   SERVER START
-========================= */
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`✨ Nyla API running on ${MODEL_NAME} at port ${PORT}`);
+app.listen(3000, () => {
+  console.log("✨ Nyla API running on Gemini 1.5 Flash");
 });
