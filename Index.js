@@ -1,37 +1,41 @@
 app.post("/nyla", async (req, res) => {
   const { message } = req.body;
 
-  if (!message) {
+  if (!message || typeof message !== "string") {
     return res.status(400).json({
-      error: "Missing 'message' in request body",
+      reply: "You gotta say something 😭",
+      emotion: "shocked",
+      cooldown: false,
     });
   }
 
   try {
-    // ✅ CREATE MODEL INSTANCES (IMPORTANT)
-    const chatModel = ai.getGenerativeModel({
-      model: "gemini-1.5-flash"
+    /* =========================
+       MODEL INSTANCE
+    ========================= */
+    const model = ai.getGenerativeModel({
+      model: "gemini-1.5-flash",
     });
 
-    const emotionModel = ai.getGenerativeModel({
-      model: "gemini-1.5-flash"
-    });
-
-    /* ---------- Nyla Reply ---------- */
-    const replyResult = await chatModel.generateContent(
-      `${NYLA_PERSONALITY}
+    /* =========================
+       NYLA REPLY
+    ========================= */
+    const replyResult = await model.generateContent(`
+${NYLA_PERSONALITY}
 
 User message:
 ${message}
 
-Reply as Nyla:`
-    );
+Reply as Nyla:
+`);
 
-    const reply = replyResult.response.text();
+    const reply = replyResult.response.text().trim();
 
-    /* ---------- Emotion Detection ---------- */
-    const emotionResult = await emotionModel.generateContent(
-      `${EMOTION_RULES}
+    /* =========================
+       EMOTION DETECTION
+    ========================= */
+    const emotionResult = await model.generateContent(`
+${EMOTION_RULES}
 
 User message:
 ${message}
@@ -39,10 +43,29 @@ ${message}
 Nyla reply:
 ${reply}
 
-Emotion:`
-    );
+Emotion:
+`);
 
-    const emotion = emotionResult.response.text().trim().toLowerCase();
+    let emotion = emotionResult.response.text().trim().toLowerCase();
+
+    /* =========================
+       EMOTION SANITIZER
+    ========================= */
+    const allowedEmotions = [
+      "happy",
+      "sad",
+      "angry",
+      "blush",
+      "shocked",
+      "smug",
+      "sleepy",
+      "excited",
+      "gamer",
+    ];
+
+    if (!allowedEmotions.includes(emotion)) {
+      emotion = "happy"; // safe fallback
+    }
 
     return res.json({
       reply,
@@ -53,20 +76,24 @@ Emotion:`
   } catch (err) {
     console.error("🔥 Gemini Error FULL:", err);
 
-    // ⛽ QUOTA / RATE LIMIT
+    /* =========================
+       RATE LIMIT / QUOTA
+    ========================= */
     if (
       err?.status === 429 ||
       err?.message?.includes("RESOURCE_EXHAUSTED") ||
       err?.message?.includes("quota")
     ) {
       return res.json({
-        reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
+        reply: "I’m recharging rn 🔋💤 Come back in a bit, okay?",
         emotion: "sleepy",
         cooldown: true,
       });
     }
 
-    // ❌ REAL FAILURE
+    /* =========================
+       HARD FAIL
+    ========================= */
     return res.status(500).json({
       reply: "Something broke on my side 😭",
       emotion: "shocked",
