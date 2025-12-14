@@ -16,13 +16,11 @@ const groq = new OpenAI({
 });
 
 /* =========================
-   SUPABASE (SERVICE ROLE ✅)
-   - Bypasses RLS
-   - Backend only
+   SUPABASE (SERVICE ROLE)
 ========================= */
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY // 🔥 FIX
 );
 
 /* =========================
@@ -129,14 +127,14 @@ async function loadMemory(userId) {
 
   const { data, error } = await supabase
     .from("nyla_memory")
-    .select("value")
+    .select("value, importance, created_at")
     .eq("user_id", userId)
     .order("importance", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(6);
 
   if (error) {
-    console.error("🧠 MEMORY LOAD ERROR:", error.message);
+    console.error("🧠 MEMORY LOAD ERROR:", error);
     return "";
   }
 
@@ -173,35 +171,50 @@ async function extractMemory(userMessage, nylaReply) {
 }
 
 /* =========================
-   SAVE MEMORY
+   SAVE MEMORY (FIXED)
 ========================= */
 async function saveMemory(userId, memory) {
   if (!memory?.save) return;
   if (!userId || userId === "guest") return;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: selectError } = await supabase
     .from("nyla_memory")
     .select("id")
     .eq("user_id", userId)
-    .eq("key", memory.key)
+    .eq("memory_key", memory.key)
     .limit(1);
 
+  if (selectError) {
+    console.error("🧠 MEMORY SELECT ERROR:", selectError);
+    return;
+  }
+
   if (existing?.length) {
-    await supabase
+    const { error: updateError } = await supabase
       .from("nyla_memory")
       .update({
         value: memory.value,
         importance: memory.importance
       })
       .eq("id", existing[0].id);
+
+    if (updateError) {
+      console.error("🧠 MEMORY UPDATE ERROR:", updateError);
+    }
   } else {
-    await supabase.from("nyla_memory").insert({
-      user_id: userId,
-      type: memory.type,
-      key: memory.key,
-      value: memory.value,
-      importance: memory.importance
-    });
+    const { error: insertError } = await supabase
+      .from("nyla_memory")
+      .insert({
+        user_id: userId,
+        type: memory.type,
+        memory_key: memory.key,
+        value: memory.value,
+        importance: memory.importance
+      });
+
+    if (insertError) {
+      console.error("🧠 MEMORY INSERT ERROR:", insertError);
+    }
   }
 }
 
@@ -255,7 +268,7 @@ app.post("/nyla", async (req, res) => {
     let reply =
       completion.choices[0]?.message?.content?.trim() || "heyyy 💜";
 
-    /* 🧠 MEMORY SAVE */
+    /* 🧠 MEMORY EXTRACTION + SAVE */
     const memory = await extractMemory(message, reply);
     await saveMemory(userId, memory);
 
@@ -282,5 +295,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with REAL MEMORY (SERVICE ROLE)");
+  console.log("✨ Nyla API running with REAL MEMORY (WRITE FIXED)");
 });
