@@ -1,7 +1,7 @@
 {
   "name": "nyla-api",
-  "version": "1.0.0",
-  "description": "Nyla AI API powered by Gemini",
+  "version": "1.0.1",
+  "description": "Nyla AI API powered by Gemini 1.5 Flash",
   "type": "module",
   "main": "index.js",
   "scripts": {
