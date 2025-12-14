@@ -1,9 +1,7 @@
 {
   "name": "nyla-api",
-  "version": "1.0.1",
-  "description": "Nyla AI API powered by Gemini 1.5 Flash",
+  "version": "1.0.0",
   "type": "module",
-  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
@@ -13,6 +11,6 @@
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
-    "@google/genai": "^0.7.0"
+    "@google/generative-ai": "^0.21.0"
   }
 }
