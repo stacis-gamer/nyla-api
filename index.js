@@ -6,8 +6,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+/* =========================
+   GEMINI INIT
+========================= */
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
+});
+
+// ✅ PINNED, STABLE MODEL (DO NOT USE -latest)
+const chatModel = ai.getGenerativeModel({
+  model: "gemini-1.5-flash-001",
+});
+
+const emotionModel = ai.getGenerativeModel({
+  model: "gemini-1.5-flash-001",
 });
 
 /* =========================
@@ -52,26 +64,23 @@ app.post("/nyla", async (req, res) => {
   }
 
   try {
-    /* ---------- Nyla Reply ---------- */
-    const replyRes = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: `
-${NYLA_PERSONALITY}
+    /* ---------- NYLA REPLY ---------- */
+    const replyResult = await chatModel.generateContent(
+      `${NYLA_PERSONALITY}
 
 User message:
 ${message}
 
-Reply as Nyla:
-`,
-    });
+Reply as Nyla:`
+    );
 
-    const reply = replyRes.text?.trim() || "Heyyy 💜";
+    const reply =
+      replyResult?.response?.text()?.trim() ||
+      "Heyyy 💜 What’s up?";
 
-    /* ---------- Emotion Detection ---------- */
-    const emotionRes = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: `
-${EMOTION_RULES}
+    /* ---------- EMOTION DETECTION ---------- */
+    const emotionResult = await emotionModel.generateContent(
+      `${EMOTION_RULES}
 
 User message:
 ${message}
@@ -79,12 +88,12 @@ ${message}
 Nyla reply:
 ${reply}
 
-Emotion:
-`,
-    });
+Emotion:`
+    );
 
     const emotion =
-      emotionRes.text?.trim().toLowerCase() || "happy";
+      emotionResult?.response?.text()?.trim().toLowerCase() ||
+      "happy";
 
     return res.json({
       reply,
@@ -93,13 +102,13 @@ Emotion:
     });
 
   } catch (err) {
-    console.error("🔥 Gemini Error:", err?.message || err);
+    console.error("🔥 Gemini Error FULL:", err);
 
-    /* ---------- RATE LIMIT / QUOTA HANDLING ---------- */
+    /* ---------- QUOTA / RATE LIMIT ---------- */
     if (
+      err?.status === 429 ||
       err?.message?.includes("RESOURCE_EXHAUSTED") ||
-      err?.message?.includes("rate limit") ||
-      err?.status === 429
+      err?.message?.toLowerCase()?.includes("quota")
     ) {
       return res.json({
         reply: "I’m recharging right now 🔋💜 Give me a bit, okay?",
@@ -108,7 +117,7 @@ Emotion:
       });
     }
 
-    /* ---------- FALLBACK ERROR ---------- */
+    /* ---------- HARD FAILURE ---------- */
     return res.status(500).json({
       reply: "Something broke on my side 😭",
       emotion: "shocked",
@@ -121,5 +130,5 @@ Emotion:
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running on Gemini 1.5 Flash");
+  console.log("✨ Nyla API running on Gemini 1.5 Flash (001)");
 });
