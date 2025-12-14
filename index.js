@@ -16,11 +16,13 @@ const groq = new OpenAI({
 });
 
 /* =========================
-   SUPABASE
+   SUPABASE (SERVICE ROLE ✅)
+   - Bypasses RLS
+   - Backend only
 ========================= */
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 /* =========================
@@ -125,13 +127,18 @@ function memoryAck(memory) {
 async function loadMemory(userId) {
   if (!userId || userId === "guest") return "";
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("nyla_memory")
     .select("value")
     .eq("user_id", userId)
     .order("importance", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(6);
+
+  if (error) {
+    console.error("🧠 MEMORY LOAD ERROR:", error.message);
+    return "";
+  }
 
   if (!data || data.length === 0) return "";
 
@@ -228,7 +235,7 @@ app.post("/nyla", async (req, res) => {
       emotionRes.choices[0]?.message?.content
     );
 
-    /* 🧠 LOAD MEMORY (BEFORE REPLY) */
+    /* 🧠 LOAD MEMORY */
     const memoryContext = await loadMemory(userId);
 
     /* 💬 MAIN REPLY */
@@ -248,11 +255,11 @@ app.post("/nyla", async (req, res) => {
     let reply =
       completion.choices[0]?.message?.content?.trim() || "heyyy 💜";
 
-    /* 🧠 MEMORY EXTRACTION + SAVE */
+    /* 🧠 MEMORY SAVE */
     const memory = await extractMemory(message, reply);
     await saveMemory(userId, memory);
 
-    /* 💜 ACKNOWLEDGE MEMORY */
+    /* 💜 ACK */
     reply += memoryAck(memory);
 
     return res.json({
@@ -275,5 +282,5 @@ app.post("/nyla", async (req, res) => {
    SERVER START
 ========================= */
 app.listen(3000, () => {
-  console.log("✨ Nyla API running with REAL MEMORY (FIXED)");
+  console.log("✨ Nyla API running with REAL MEMORY (SERVICE ROLE)");
 });
